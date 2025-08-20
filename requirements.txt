@@ -1,0 +1,6 @@
+aiogram
+aiosqlite
+reportlab
+python-dotenv
+phonenumbers
+reportlab

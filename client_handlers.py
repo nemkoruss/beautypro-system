@@ -2,7 +2,7 @@ from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import ContextTypes, ConversationHandler, MessageHandler, filters
 import logging
 from config import config, logger
-from database import db, Service, Client, Order
+from database import db, Service, Client, Order, BotSettings  # Добавили BotSettings
 
 # Состояния для ConversationHandler
 SELECT_SERVICE, SELECT_MASTER, ENTER_PHONE = range(3)
@@ -18,13 +18,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     session = db.get_session()
     try:
         # Получаем приветственное сообщение из настроек
-        settings = session.query(db.BotSettings).first()
+        settings = session.query(BotSettings).first()  # Исправили на BotSettings
         welcome_message = settings.welcome_message if settings else "Добро пожаловать в нашу студию маникюра!"
         
         keyboard = [
             ['💅 Маникюр', '🦶 Педикюр'],
             ['📢 Перейти в Telegram канал', '🌐 Посетить сайт'],
-            ['📞 Позвонить', '📍 Посмотреть адрес на карте'],
+            ['📞 Позвонить', '📍 Посмотреть адрес на карte'],
             ['📄 Скачать прайс в PDF']
         ]
         

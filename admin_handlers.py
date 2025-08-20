@@ -2,7 +2,7 @@ from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import ContextTypes, ConversationHandler, MessageHandler, filters
 import logging
 from config import config, logger
-from database import db, Service, Master, Client, Order, BotSettings
+from database import db, Service, Master, Client, Order, BotSettings  # Добавили BotSettings
 
 # Состояния для администратора
 ADMIN_MAIN, ADD_SERVICE, EDIT_SERVICE, DELETE_SERVICE, ADD_MASTER, EDIT_MASTER, DELETE_MASTER = range(7)
@@ -172,7 +172,7 @@ async def edit_welcome_message(update: Update, context: ContextTypes.DEFAULT_TYP
     
     session = db.get_session()
     try:
-        settings = session.query(BotSettings).first()
+        settings = session.query(BotSettings).first()  # Исправили на BotSettings
         if not settings:
             settings = BotSettings()
             session.add(settings)

@@ -4,7 +4,7 @@ from database import db
 from client_handlers import (
     start, handle_message, show_services, select_service, 
     select_master, enter_phone, cancel,
-    SELECT_CATEGORY, SELECT_SERVICE, SELECT_MASTER, ENTER_PHONE
+    SELECT_SERVICE, SELECT_MASTER, ENTER_PHONE
 )
 from admin_handlers import (
     admin_panel, admin_main_handler, add_service, broadcast_message,
@@ -24,13 +24,13 @@ def main():
     # Создаем приложение
     application = Application.builder().token(config.BOT_TOKEN).build()
 
+    # Обработчик для обычных сообщений (главное меню)
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
     # Обработчик для клиентов
     client_conversation = ConversationHandler(
-        entry_points=[CommandHandler('start', start)],
+        entry_points=[],
         states={
-            SELECT_CATEGORY: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
-            ],
             SELECT_SERVICE: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, select_service)
             ],
@@ -41,7 +41,8 @@ def main():
                 MessageHandler(filters.TEXT & ~filters.COMMAND, enter_phone)
             ]
         },
-        fallbacks=[CommandHandler('cancel', cancel)]
+        fallbacks=[CommandHandler('cancel', cancel)],
+        allow_reentry=True
     )
 
     # Обработчик для администраторов
@@ -61,15 +62,14 @@ def main():
                 MessageHandler(filters.TEXT & ~filters.COMMAND, edit_welcome_message)
             ]
         },
-        fallbacks=[CommandHandler('cancel', admin_cancel)]
+        fallbacks=[CommandHandler('cancel', admin_cancel)],
+        allow_reentry=True
     )
 
     # Добавляем обработчики
     application.add_handler(client_conversation)
     application.add_handler(admin_conversation)
-    
-    # Обработчик для обычных сообщений
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    application.add_handler(CommandHandler('start', start))
 
     # Запускаем бота
     logger.info("Bot started successfully")

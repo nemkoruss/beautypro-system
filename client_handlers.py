@@ -1,12 +1,11 @@
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import ContextTypes, ConversationHandler, MessageHandler, filters
 import logging
 from config import config, logger
 from database import db, Service, Client, Order
-from create_pdf import generate_price_list
 
 # Состояния для ConversationHandler
-SELECT_CATEGORY, SELECT_SERVICE, SELECT_MASTER, ENTER_PHONE = range(4)
+SELECT_SERVICE, SELECT_MASTER, ENTER_PHONE = range(3)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.from_user.id in config.ADMIN_IDS:
@@ -37,6 +36,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Произошла ошибка. Пожалуйста, попробуйте позже.")
     finally:
         session.close()
+    
+    return ConversationHandler.END
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.from_user.id in config.ADMIN_IDS:
@@ -66,6 +67,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     
     elif text == '📄 Скачать прайс в PDF':
+        from create_pdf import generate_price_list
         pdf_path = generate_price_list()
         if pdf_path:
             with open(pdf_path, 'rb') as pdf_file:
@@ -75,6 +77,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
         else:
             await update.message.reply_text("Извините, прайс-лист временно недоступен.")
+    
+    return ConversationHandler.END
 
 async def show_services(update: Update, context: ContextTypes.DEFAULT_TYPE, category: str):
     session = db.get_session()
@@ -133,6 +137,9 @@ async def select_service(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             
             return SELECT_MASTER
+        else:
+            await update.message.reply_text("Услуга не найдена. Пожалуйста, выберите из списка.")
+            return SELECT_SERVICE
         
     except Exception as e:
         logger.error(f"Error selecting service: {e}")

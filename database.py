@@ -81,6 +81,7 @@ class Database:
         try:
             # Проверяем, есть ли уже данные
             if not session.query(Service).first():
+                # Добавляем стандартные услуги
                 default_services = [
                     Service(category='Маникюр', name='Классический маникюр', price=1500, duration=60, master='Анна'),
                     Service(category='Маникюр', name='Гель-лак', price=2000, duration=90, master='Мария'),
@@ -92,7 +93,7 @@ class Database:
             
             if not session.query(Master).first():
                 default_masters = [
-                    Master(name='Анна', specialization='Маникюр', phone='+79991234561'),
+                    Master(name='Анna', specialization='Маникюр', phone='+79991234561'),
                     Master(name='Мария', specialization='Гель-лак', phone='+79991234562'),
                     Master(name='Елена', specialization='Наращивание', phone='+79991234563'),
                     Master(name='Ольга', specialization='Педикюр', phone='+79991234564'),
@@ -104,10 +105,10 @@ class Database:
                 session.add(BotSettings())
             
             session.commit()
-            print("Default data created successfully")
+            print("✅ Default data created successfully")
         except Exception as e:
             session.rollback()
-            print(f"Error creating default data: {e}")
+            print(f"❌ Error creating default data: {e}")
             raise e
         finally:
             session.close()
@@ -121,4 +122,4 @@ db = Database()
 # Для тестирования
 if __name__ == "__main__":
     db.init_db()
-    print("Database initialized successfully")
+    print("✅ Database initialized successfully")

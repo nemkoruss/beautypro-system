@@ -157,8 +157,6 @@ async def show_services_for_edit(update: Update):
     finally:
         session.close()
 
-# Аналогичные функции для других административных действий...
-
 async def broadcast_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message.text
     
@@ -217,7 +215,7 @@ async def show_clients_list(update: Update):
 async def show_orders_list(update: Update):
     session = db.get_session()
     try:
-        orders = session.query(Order).join(Service).order_by(Order.created_at.desc()).limit(10).all()
+        orders = session.query(Order).order_by(Order.created_at.desc()).limit(10).all()
         
         if not orders:
             await update.message.reply_text("Нет оформленных заказов.")

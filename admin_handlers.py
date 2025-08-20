@@ -2,7 +2,7 @@ from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import ContextTypes, ConversationHandler, MessageHandler, filters
 import logging
 from config import config, logger
-from database import db, Service, Master, Client, Order, BotSettings  # Добавили BotSettings
+from database import db, Service, Master, Client, Order, BotSettings
 
 # Состояния для администратора
 ADMIN_MAIN, ADD_SERVICE, EDIT_SERVICE, DELETE_SERVICE, ADD_MASTER, EDIT_MASTER, DELETE_MASTER = range(7)
@@ -15,7 +15,7 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     keyboard = [
         ['➕ Добавить услугу', '✏️ Изменить услугу', '🗑️ Удалить услугу'],
-        ['👩‍💼 Добавить мастера', '✏️ Изменить мастера', '🗑️ Удалить мастера'],
+        ['👩‍💼 Добавить мастера', '✏️ Изменить мастera', '🗑️ Удалить мастера'],
         ['💰 Изменить цены', '⏰ Изменить время услуги'],
         ['📢 Сделать рассылку', '✏️ Редактировать приветствие'],
         ['👥 Список клиентов', '📋 Список заказов'],
@@ -30,11 +30,19 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def admin_main_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     
-    if text == '➕ Добавить услугу':
+    if text == '⬅️ Назад':
+        await update.message.reply_text(
+            "Возврат в главное меню.",
+            reply_markup=ReplyKeyboardRemove()
+        )
+        return ConversationHandler.END
+    
+    elif text == '➕ Добавить услугу':
         await update.message.reply_text(
             "Введите данные услуги в формате:\n"
             "Категория|Название|Цена|Время(мин)|Мастер\n"
-            "Например: Маникюр|Гель-лак|2000|90|Анна",
+            "Например: Маникюр|Гель-лак|2000|90|Анна\n\n"
+            "Или введите '⬅️ Назад' для возврата",
             reply_markup=ReplyKeyboardRemove()
         )
         return ADD_SERVICE
@@ -51,7 +59,8 @@ async def admin_main_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await update.message.reply_text(
             "Введите данные мастера в формате:\n"
             "Имя|Специализация|Телефон\n"
-            "Например: Анна|Маникюр|+79991234567",
+            "Например: Анна|Маникюр|+79991234567\n\n"
+            "Или введите '⬅️ Назад' для возврата",
             reply_markup=ReplyKeyboardRemove()
         )
         return ADD_MASTER
@@ -66,14 +75,16 @@ async def admin_main_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     elif text == '📢 Сделать рассылку':
         await update.message.reply_text(
-            "Введите сообщение для рассылки:",
+            "Введите сообщение для рассылки:\n\n"
+            "Или введите '⬅️ Назад' для возврата",
             reply_markup=ReplyKeyboardRemove()
         )
         return BROADCAST_MESSAGE
     
     elif text == '✏️ Редактировать приветствие':
         await update.message.reply_text(
-            "Введите новое приветственное сообщение:",
+            "Введите новое приветственное сообщение:\n\n"
+            "Или введите '⬅️ Назад' для возврата",
             reply_markup=ReplyKeyboardRemove()
         )
         return EDIT_WELCOME_MESSAGE
@@ -97,16 +108,17 @@ async def admin_main_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 )
         return ADMIN_MAIN
     
-    elif text == '⬅️ Назад':
-        await update.message.reply_text(
-            "Возврат в главное меню.",
-            reply_markup=ReplyKeyboardRemove()
-        )
-        return ConversationHandler.END
+    return ADMIN_MAIN
 
 async def add_service(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text
+    
+    if text == '⬅️ Назад':
+        await admin_panel(update, context)
+        return ADMIN_MAIN
+    
     try:
-        data = update.message.text.split('|')
+        data = text.split('|')
         if len(data) != 5:
             raise ValueError("Неверный формат данных")
         
@@ -160,8 +172,11 @@ async def show_services_for_edit(update: Update):
 async def broadcast_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message.text
     
+    if message == '⬅️ Назад':
+        await admin_panel(update, context)
+        return ADMIN_MAIN
+    
     # Здесь должна быть реализация рассылки сообщения всем пользователям
-    # Для простоты просто подтверждаем отправку
     await update.message.reply_text("✅ Сообщение подготовлено для рассылки.")
     
     await admin_panel(update, context)
@@ -170,9 +185,13 @@ async def broadcast_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def edit_welcome_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     new_message = update.message.text
     
+    if new_message == '⬅️ Назад':
+        await admin_panel(update, context)
+        return ADMIN_MAIN
+    
     session = db.get_session()
     try:
-        settings = session.query(BotSettings).first()  # Исправили на BotSettings
+        settings = session.query(BotSettings).first()
         if not settings:
             settings = BotSettings()
             session.add(settings)

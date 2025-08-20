@@ -42,7 +42,8 @@ def main():
             ]
         },
         fallbacks=[CommandHandler('cancel', cancel)],
-        allow_reentry=True
+        allow_reentry=True,
+        per_message=False
     )
 
     # Обработчик для администраторов
@@ -63,7 +64,8 @@ def main():
             ]
         },
         fallbacks=[CommandHandler('cancel', admin_cancel)],
-        allow_reentry=True
+        allow_reentry=True,
+        per_message=False
     )
 
     # Добавляем обработчики

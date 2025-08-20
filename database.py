@@ -2,7 +2,19 @@ from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, 
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
-from config import config
+import os
+import sys
+
+# Добавляем текущую директорию в путь для импортов
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+try:
+    from config import config
+except ImportError:
+    # Fallback для случаев когда config еще не настроен
+    class SimpleConfig:
+        DATABASE_URL = 'sqlite:///beauty_salon.db'
+    config = SimpleConfig()
 
 Base = declarative_base()
 
@@ -10,10 +22,10 @@ class Service(Base):
     __tablename__ = 'services'
     
     id = Column(Integer, primary_key=True)
-    category = Column(String(50), nullable=False)  # Маникюр, Педикюр
-    name = Column(String(100), nullable=False)     # Наращивание, Гель-лак и т.д.
+    category = Column(String(50), nullable=False)
+    name = Column(String(100), nullable=False)
     price = Column(Float, nullable=False)
-    duration = Column(Integer, nullable=False)     # Время в минутах
+    duration = Column(Integer, nullable=False)
     master = Column(String(100), nullable=False)
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
@@ -43,7 +55,7 @@ class Order(Base):
     client_id = Column(Integer, nullable=False)
     service_id = Column(Integer, nullable=False)
     master_name = Column(String(100), nullable=False)
-    status = Column(String(20), default='pending')  # pending, confirmed, completed, cancelled
+    status = Column(String(20), default='pending')
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -69,7 +81,6 @@ class Database:
         try:
             # Проверяем, есть ли уже данные
             if not session.query(Service).first():
-                # Добавляем стандартные услуги
                 default_services = [
                     Service(category='Маникюр', name='Классический маникюр', price=1500, duration=60, master='Анна'),
                     Service(category='Маникюр', name='Гель-лак', price=2000, duration=90, master='Мария'),
@@ -93,8 +104,10 @@ class Database:
                 session.add(BotSettings())
             
             session.commit()
+            print("Default data created successfully")
         except Exception as e:
             session.rollback()
+            print(f"Error creating default data: {e}")
             raise e
         finally:
             session.close()
@@ -104,3 +117,8 @@ class Database:
 
 # Создаем экземпляр базы данных
 db = Database()
+
+# Для тестирования
+if __name__ == "__main__":
+    db.init_db()
+    print("Database initialized successfully")

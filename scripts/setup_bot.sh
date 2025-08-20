@@ -8,6 +8,12 @@ NC='\033[0m' # No Color
 
 echo -e "${YELLOW}Starting Beauty Pro Bot setup...${NC}"
 
+# Get the script directory
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+cd "$PROJECT_ROOT"
+
 # Update and upgrade system
 echo -e "${YELLOW}Updating system packages...${NC}"
 sudo apt update && sudo apt upgrade -y
@@ -40,15 +46,29 @@ fi
 echo -e "${YELLOW}Installing Python requirements...${NC}"
 pip3 install -r requirements.txt
 
+# Create fonts directory if it doesn't exist
+mkdir -p fonts
+
+# Check if fonts exist, if not download them
+if [ ! -f "fonts/DejaVuSans-Bold.ttf" ]; then
+    echo -e "${YELLOW}Downloading DejaVuSans-Bold.ttf...${NC}"
+    wget -O fonts/DejaVuSans-Bold.ttf https://github.com/dejavu-fonts/dejavu-fonts/raw/master/ttf/DejaVuSans-Bold.ttf
+fi
+
+if [ ! -f "fonts/DejaVuSans.ttf" ]; then
+    echo -e "${YELLOW}Downloading DejaVuSans.ttf...${NC}"
+    wget -O fonts/DejaVuSans.ttf https://github.com/dejavu-fonts/dejavu-fonts/raw/master/ttf/DejaVuSans.ttf
+fi
+
 # Create .env file
 echo -e "${YELLOW}Creating .env file...${NC}"
 read -p "Enter BOT_TOKEN: " BOT_TOKEN
-read -p "Enter ADMIN_IDS (comma separated): " ADMIN_IDS
-read -p "Enter PHONE_NUMBER: " PHONE_NUMBER
-read -p "Enter WEBSITE_URL: " WEBSITE_URL
-read -p "Enter TELEGRAM_CHANNEL: " TELEGRAM_CHANNEL
-read -p "Enter LOCATION_LAT: " LOCATION_LAT
-read -p "Enter LOCATION_LON: " LOCATION_LON
+read -p "Enter ADMIN_IDS (comma separated, e.g., 123456789,987654321): " ADMIN_IDS
+read -p "Enter PHONE_NUMBER (e.g., +79991234567): " PHONE_NUMBER
+read -p "Enter WEBSITE_URL (e.g., https://your-salon.com): " WEBSITE_URL
+read -p "Enter TELEGRAM_CHANNEL (e.g., @yourchannel): " TELEGRAM_CHANNEL
+read -p "Enter LOCATION_LAT (e.g., 55.7558): " LOCATION_LAT
+read -p "Enter LOCATION_LON (e.g., 37.6173): " LOCATION_LON
 
 cat > .env << EOF
 BOT_TOKEN=$BOT_TOKEN
@@ -65,11 +85,14 @@ echo -e "${GREEN}.env file created successfully${NC}"
 
 # Initialize database
 echo -e "${YELLOW}Initializing database...${NC}"
+cd "$PROJECT_ROOT"
 python3 -c "
+import sys
+sys.path.insert(0, '.')
 from database import db
 db.init_db()
 print('Database initialized successfully')
 "
 
 echo -e "${GREEN}Setup completed successfully!${NC}"
-echo -e "${YELLOW}To start the bot, run: python3 main.py${NC}"
+echo -e "${YELLOW}To start the bot, run: cd $PROJECT_ROOT && python3 main.py${NC}"

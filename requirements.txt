@@ -1,6 +1,4 @@
-aiogram
-aiosqlite
-reportlab
+python-telegram-bot
 python-dotenv
-phonenumbers
 reportlab
+Pillow

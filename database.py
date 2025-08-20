@@ -1,406 +1,210 @@
-import aiosqlite
+import sqlite3
 import logging
-from config import DB_NAME
-from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import A4
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
-import io
+from datetime import datetime
 
-logger = logging.getLogger(__name__)
+logging.basicConfig(
+    filename='bot.log',
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
-# Регистрируем шрифты для поддержки кириллицы
-try:
-    # Попробуем зарегистрировать Arial
-    pdfmetrics.registerFont(TTFont('Arial', 'Arial.ttf'))
-    pdfmetrics.registerFont(TTFont('Arial-Bold', 'Arial Bold.ttf'))
-except:
-    try:
-        # Попробуем зарегистрировать DejaVuSans (обычно есть в Linux)
-        pdfmetrics.registerFont(TTFont('DejaVuSans', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'))
-        pdfmetrics.registerFont(TTFont('DejaVuSans-Bold', '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'))
-    except:
-        # Если не удалось зарегистрировать шрифты, будем использовать стандартные (могут не поддерживать кириллицу)
-        logger.warning("Шрифты с поддержкой кириллицы не найдены. Кириллица в PDF может отображаться некорректно.")
-
-async def init_db():
-    try:
-        async with aiosqlite.connect(DB_NAME) as db:
-            # Таблица услуг
-            await db.execute('''
-                CREATE TABLE IF NOT EXISTS services (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    category TEXT NOT NULL,
-                    name TEXT NOT NULL,
-                    price INTEGER NOT NULL,
-                    duration INTEGER NOT NULL
-                )
-            ''')
-            
-            # Таблица мастеров
-            await db.execute('''
-                CREATE TABLE IF NOT EXISTS masters (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT NOT NULL,
-                    services TEXT NOT NULL
-                )
-            ''')
-            
-            # Таблица заказов
-            await db.execute('''
-                CREATE TABLE IF NOT EXISTS orders (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    client_name TEXT NOT NULL,
-                    phone TEXT NOT NULL,
-                    category TEXT NOT NULL,
-                    service TEXT NOT NULL,
-                    price INTEGER NOT NULL,
-                    master TEXT NOT NULL,
-                    status TEXT DEFAULT 'new',
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-            
-            # Таблица пользователей для рассылки
-            await db.execute('''
-                CREATE TABLE IF NOT EXISTS users (
-                    user_id INTEGER PRIMARY KEY,
-                    username TEXT,
-                    first_name TEXT,
-                    last_name TEXT,
-                    subscribed BOOLEAN DEFAULT TRUE
-                )
-            ''')
-            
-            # Добавляем начальные данные, если таблицы пустые
-            cursor = await db.execute("SELECT COUNT(*) FROM services")
-            count = await cursor.fetchone()
-            if count[0] == 0:
-                await db.execute('''
-                    INSERT INTO services (category, name, price, duration)
-                    VALUES 
-                    ('Маникюр', 'Классический маникюр', 1500, 60),
-                    ('Маникюр', 'Гель-лак', 2000, 90),
-                    ('Маникюр', 'Наращивание', 2500, 120),
-                    ('Педикюр', 'Классический педикюр', 1800, 60),
-                    ('Педикюр', 'Педикюр с покрытием', 2200, 90)
-                ''')
-            
-            cursor = await db.execute("SELECT COUNT(*) FROM masters")
-            count = await cursor.fetchone()
-            if count[0] == 0:
-                await db.execute('''
-                    INSERT INTO masters (name, services)
-                    VALUES 
-                    ('Анна', '1,2,3'),
-                    ('Елена', '1,2,4,5'),
-                    ('Мария', '2,3,5'),
-                    ('Ольга', '1,4,5')
-                ''')
-            
-            await db.commit()
-            logger.info("База данных успешно инициализирована")
-    except Exception as e:
-        logger.error(f"Ошибка инициализации базы данных: {e}")
-        raise
-
-async def get_services(category: str = None):
-    try:
-        async with aiosqlite.connect(DB_NAME) as db:
-            if category:
-                cursor = await db.execute(
-                    "SELECT id, name, price, duration FROM services WHERE category = ?", 
-                    (category,)
-                )
-            else:
-                cursor = await db.execute("SELECT id, category, name, price, duration FROM services")
-            return await cursor.fetchall()
-    except Exception as e:
-        logger.error(f"Error getting services: {e}")
-        return []
-
-async def get_service_by_id(service_id: int):
-    try:
-        async with aiosqlite.connect(DB_NAME) as db:
-            cursor = await db.execute(
-                "SELECT id, category, name, price, duration FROM services WHERE id = ?", 
-                (service_id,)
-            )
-            return await cursor.fetchone()
-    except Exception as e:
-        logger.error(f"Error getting service by ID: {e}")
-        return None
-
-async def add_service(category: str, name: str, price: int, duration: int):
-    try:
-        async with aiosqlite.connect(DB_NAME) as db:
-            await db.execute(
-                "INSERT INTO services (category, name, price, duration) VALUES (?, ?, ?, ?)",
-                (category, name, price, duration)
-            )
-            await db.commit()
-            return True
-    except Exception as e:
-        logger.error(f"Error adding service: {e}")
-        return False
-
-async def update_service(service_id: int, category: str, name: str, price: int, duration: int):
-    try:
-        async with aiosqlite.connect(DB_NAME) as db:
-            await db.execute(
-                "UPDATE services SET category = ?, name = ?, price = ?, duration = ? WHERE id = ?",
-                (category, name, price, duration, service_id)
-            )
-            await db.commit()
-            return True
-    except Exception as e:
-        logger.error(f"Error updating service: {e}")
-        return False
-
-async def delete_service(service_id: int):
-    try:
-        async with aiosqlite.connect(DB_NAME) as db:
-            await db.execute("DELETE FROM services WHERE id = ?", (service_id,))
-            await db.commit()
-            return True
-    except Exception as e:
-        logger.error(f"Error deleting service: {e}")
-        return False
-
-async def get_masters():
-    try:
-        async with aiosqlite.connect(DB_NAME) as db:
-            cursor = await db.execute("SELECT id, name, services FROM masters")
-            return await cursor.fetchall()
-    except Exception as e:
-        logger.error(f"Error getting masters: {e}")
-        return []
-
-async def get_master_by_id(master_id: int):
-    try:
-        async with aiosqlite.connect(DB_NAME) as db:
-            cursor = await db.execute(
-                "SELECT id, name, services FROM masters WHERE id = ?", 
-                (master_id,)
-            )
-            return await cursor.fetchone()
-    except Exception as e:
-        logger.error(f"Error getting master by ID: {e}")
-        return None
-
-async def get_masters_by_service(service_id: int):
-    try:
-        async with aiosqlite.connect(DB_NAME) as db:
-            cursor = await db.execute(
-                "SELECT id, name FROM masters WHERE services LIKE ?", 
-                (f'%{service_id}%',)
-            )
-            return await cursor.fetchall()
-    except Exception as e:
-        logger.error(f"Error getting masters by service: {e}")
-        return []
-
-async def add_master(name: str, services: str):
-    try:
-        async with aiosqlite.connect(DB_NAME) as db:
-            await db.execute(
-                "INSERT INTO masters (name, services) VALUES (?, ?)",
-                (name, services)
-            )
-            await db.commit()
-            return True
-    except Exception as e:
-        logger.error(f"Error adding master: {e}")
-        return False
-
-async def update_master(master_id: int, name: str, services: str):
-    try:
-        async with aiosqlite.connect(DB_NAME) as db:
-            await db.execute(
-                "UPDATE masters SET name = ?, services = ? WHERE id = ?",
-                (name, services, master_id)
-            )
-            await db.commit()
-            return True
-    except Exception as e:
-        logger.error(f"Error updating master: {e}")
-        return False
-
-async def delete_master(master_id: int):
-    try:
-        async with aiosqlite.connect(DB_NAME) as db:
-            await db.execute("DELETE FROM masters WHERE id = ?", (master_id,))
-            await db.commit()
-            return True
-    except Exception as e:
-        logger.error(f"Error deleting master: {e}")
-        return False
-
-async def add_order(client_name: str, phone: str, category: str, service: str, price: int, master: str):
-    try:
-        async with aiosqlite.connect(DB_NAME) as db:
-            cursor = await db.execute(
-                "INSERT INTO orders (client_name, phone, category, service, price, master) VALUES (?, ?, ?, ?, ?, ?)",
-                (client_name, phone, category, service, price, master)
-            )
-            await db.commit()
-            return cursor.lastrowid
-    except Exception as e:
-        logger.error(f"Error adding order: {e}")
-        return None
-
-async def get_orders():
-    try:
-        async with aiosqlite.connect(DB_NAME) as db:
-            cursor = await db.execute(
-                "SELECT id, client_name, phone, category, service, price, master, status, created_at FROM orders ORDER BY created_at DESC"
-            )
-            return await cursor.fetchall()
-    except Exception as e:
-        logger.error(f"Error getting orders: {e}")
-        return []
-
-async def update_order_status(order_id: int, status: str):
-    try:
-        async with aiosqlite.connect(DB_NAME) as db:
-            await db.execute(
-                "UPDATE orders SET status = ? WHERE id = ?",
-                (status, order_id)
-            )
-            await db.commit()
-            return True
-    except Exception as e:
-        logger.error(f"Error updating order status: {e}")
-        return False
-
-async def add_user(user_id: int, username: str, first_name: str, last_name: str):
-    try:
-        async with aiosqlite.connect(DB_NAME) as db:
-            await db.execute(
-                "INSERT OR IGNORE INTO users (user_id, username, first_name, last_name) VALUES (?, ?, ?, ?)",
-                (user_id, username, first_name, last_name)
-            )
-            await db.commit()
-            return True
-    except Exception as e:
-        logger.error(f"Error adding user: {e}")
-        return False
-
-async def get_users():
-    try:
-        async with aiosqlite.connect(DB_NAME) as db:
-            cursor = await db.execute(
-                "SELECT user_id, username, first_name, last_name FROM users WHERE subscribed = TRUE"
-            )
-            return await cursor.fetchall()
-    except Exception as e:
-        logger.error(f"Error getting users: {e}")
-        return []
-
-async def unsubscribe_user(user_id: int):
-    try:
-        async with aiosqlite.connect(DB_NAME) as db:
-            await db.execute(
-                "UPDATE users SET subscribed = FALSE WHERE user_id = ?",
-                (user_id,)
-            )
-            await db.commit()
-            return True
-    except Exception as e:
-        logger.error(f"Error unsubscribing user: {e}")
-        return False
-
-async def generate_price_pdf():
-    """Генерирует PDF с прайс-листом услуг"""
-    try:
-        services = await get_services()
-        
-        if not services:
-            return None
-        
-        # Создаем PDF в памяти
-        buffer = io.BytesIO()
-        c = canvas.Canvas(buffer, pagesize=A4)
-        width, height = A4
-        
-        # Пытаемся использовать шрифты с поддержкой кириллицы
+class Database:
+    def __init__(self, db_name='beauty_bot.db'):
+        self.db_name = db_name
+        self.init_db()
+    
+    def get_connection(self):
+        return sqlite3.connect(self.db_name)
+    
+    def init_db(self):
         try:
-            c.setFont("Arial", 16)
-        except:
-            try:
-                c.setFont("DejaVuSans", 16)
-            except:
-                c.setFont("Helvetica", 16)  # Фолбэк
-        
-        # Заголовок
-        c.drawString(100, height - 50, "Прайс-лист студии маникюра")
-        
-        # Текущая позиция Y
-        y = height - 80
-        
-        # Группируем услуги по категориям
-        categories = {}
-        for service in services:
-            category = service[1]
-            if category not in categories:
-                categories[category] = []
-            categories[category].append(service)
-        
-        # Устанавливаем шрифт для содержимого
-        try:
-            c.setFont("Arial", 12)
-        except:
-            try:
-                c.setFont("DejaVuSans", 12)
-            except:
-                c.setFont("Helvetica", 12)  # Фолбэк
-        
-        # Добавляем услуги в PDF
-        for category, services_in_category in categories.items():
-            # Заголовок категории
-            try:
-                c.setFont("Arial-Bold", 14)
-            except:
-                try:
-                    c.setFont("DejaVuSans-Bold", 14)
-                except:
-                    c.setFont("Helvetica-Bold", 14)  # Фолбэк
-            
-            c.drawString(100, y, category)
-            y -= 25
-            
-            # Услуги в категории
-            try:
-                c.setFont("Arial", 12)
-            except:
-                try:
-                    c.setFont("DejaVuSans", 12)
-                except:
-                    c.setFont("Helvetica", 12)  # Фолбэк
-            
-            for service in services_in_category:
-                service_text = f"{service[2]} - {service[3]} руб. ({service[4]} мин.)"
-                c.drawString(120, y, service_text)
-                y -= 20
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
                 
-                # Если не хватает места на странице, создаем новую
-                if y < 50:
-                    c.showPage()
-                    y = height - 50
-                    try:
-                        c.setFont("Arial", 12)
-                    except:
-                        try:
-                            c.setFont("DejaVuSans", 12)
-                        except:
-                            c.setFont("Helvetica", 12)  # Фолбэк
-            
-            y -= 10  # Отступ между категориями
+                # Таблица услуг
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS services (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        category TEXT NOT NULL,
+                        name TEXT NOT NULL,
+                        price REAL NOT NULL,
+                        duration INTEGER NOT NULL,
+                        master_id INTEGER,
+                        is_active BOOLEAN DEFAULT TRUE
+                    )
+                ''')
+                
+                # Таблица мастеров
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS masters (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        name TEXT NOT NULL,
+                        specialties TEXT,
+                        is_active BOOLEAN DEFAULT TRUE
+                    )
+                ''')
+                
+                # Таблица клиентов
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS clients (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        telegram_id INTEGER UNIQUE,
+                        username TEXT,
+                        first_name TEXT,
+                        last_name TEXT,
+                        phone TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                ''')
+                
+                # Таблица заказов
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS orders (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        client_id INTEGER,
+                        service_id INTEGER,
+                        master_id INTEGER,
+                        status TEXT DEFAULT 'pending',
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (client_id) REFERENCES clients (id),
+                        FOREIGN KEY (service_id) REFERENCES services (id),
+                        FOREIGN KEY (master_id) REFERENCES masters (id)
+                    )
+                ''')
+                
+                # Вставляем начальные данные
+                self.insert_initial_data(cursor)
+                
+                conn.commit()
+                logging.info("База данных инициализирована успешно")
+                
+        except Exception as e:
+            logging.error(f"Ошибка инициализации БД: {e}")
+    
+    def insert_initial_data(self, cursor):
+        # Проверяем, есть ли уже мастера
+        cursor.execute("SELECT COUNT(*) FROM masters")
+        if cursor.fetchone()[0] == 0:
+            masters = [
+                ('Галина', 'Маникюр,Наращивание'),
+                ('Ольга', 'Маникюр,Гель Лак'),
+                ('Елена', 'Педикюр'),
+            ]
+            cursor.executemany(
+                "INSERT INTO masters (name, specialties) VALUES (?, ?)",
+                masters
+            )
         
-        c.save()
-        buffer.seek(0)
-        return buffer
-        
-    except Exception as e:
-        logger.error(f"Error generating price PDF: {e}")
-        return None
+        # Проверяем, есть ли уже услуги
+        cursor.execute("SELECT COUNT(*) FROM services")
+        if cursor.fetchone()[0] == 0:
+            services = [
+                ('Маникюр', 'Наращивание', 2500.0, 120, 1),
+                ('Маникюр', 'Классический маникюр', 1500.0, 60, 2),
+                ('Маникюр', 'Гель Лак', 1800.0, 90, 2),
+                ('Педикюр', 'Классический педикюр', 2000.0, 90, 3),
+                ('Педикюр', 'Аппаратный педикюр', 2500.0, 120, 3),
+            ]
+            cursor.executemany(
+                "INSERT INTO services (category, name, price, duration, master_id) VALUES (?, ?, ?, ?, ?)",
+                services
+            )
+    
+    def add_client(self, telegram_id, username, first_name, last_name, phone):
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    INSERT OR REPLACE INTO clients 
+                    (telegram_id, username, first_name, last_name, phone)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (telegram_id, username, first_name, last_name, phone))
+                conn.commit()
+                return cursor.lastrowid
+        except Exception as e:
+            logging.error(f"Ошибка добавления клиента: {e}")
+            return None
+    
+    def add_order(self, client_id, service_id, master_id):
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    INSERT INTO orders (client_id, service_id, master_id)
+                    VALUES (?, ?, ?)
+                ''', (client_id, service_id, master_id))
+                conn.commit()
+                return cursor.lastrowid
+        except Exception as e:
+            logging.error(f"Ошибка добавления заказа: {e}")
+            return None
+    
+    def get_services_by_category(self, category):
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    SELECT s.*, m.name as master_name 
+                    FROM services s 
+                    LEFT JOIN masters m ON s.master_id = m.id 
+                    WHERE s.category = ? AND s.is_active = TRUE
+                ''', (category,))
+                return cursor.fetchall()
+        except Exception as e:
+            logging.error(f"Ошибка получения услуг: {e}")
+            return []
+    
+    def get_service_by_id(self, service_id):
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    SELECT s.*, m.name as master_name 
+                    FROM services s 
+                    LEFT JOIN masters m ON s.master_id = m.id 
+                    WHERE s.id = ?
+                ''', (service_id,))
+                return cursor.fetchone()
+        except Exception as e:
+            logging.error(f"Ошибка получения услуги: {e}")
+            return None
+    
+    def get_masters(self):
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT * FROM masters WHERE is_active = TRUE")
+                return cursor.fetchall()
+        except Exception as e:
+            logging.error(f"Ошибка получения мастеров: {e}")
+            return []
+    
+    def get_clients(self):
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT * FROM clients")
+                return cursor.fetchall()
+        except Exception as e:
+            logging.error(f"Ошибка получения клиентов: {e}")
+            return []
+    
+    def get_orders(self):
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    SELECT o.*, c.first_name, c.phone, s.name as service_name, 
+                           s.price, s.duration, m.name as master_name
+                    FROM orders o
+                    JOIN clients c ON o.client_id = c.id
+                    JOIN services s ON o.service_id = s.id
+                    JOIN masters m ON o.master_id = m.id
+                ''')
+                return cursor.fetchall()
+        except Exception as e:
+            logging.error(f"Ошибка получения заказов: {e}")
+            return []
+
+# Создаем глобальный экземпляр базы данных
+db = Database()

@@ -1,210 +1,106 @@
-import sqlite3
-import logging
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Text
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
 from datetime import datetime
+from config import config
 
-logging.basicConfig(
-    filename='bot.log',
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+Base = declarative_base()
+
+class Service(Base):
+    __tablename__ = 'services'
+    
+    id = Column(Integer, primary_key=True)
+    category = Column(String(50), nullable=False)  # Маникюр, Педикюр
+    name = Column(String(100), nullable=False)     # Наращивание, Гель-лак и т.д.
+    price = Column(Float, nullable=False)
+    duration = Column(Integer, nullable=False)     # Время в минутах
+    master = Column(String(100), nullable=False)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+class Master(Base):
+    __tablename__ = 'masters'
+    
+    id = Column(Integer, primary_key=True)
+    name = Column(String(100), nullable=False)
+    specialization = Column(String(100))
+    phone = Column(String(20))
+    created_at = Column(DateTime, default=datetime.now)
+
+class Client(Base):
+    __tablename__ = 'clients'
+    
+    id = Column(Integer, primary_key=True)
+    telegram_id = Column(Integer, nullable=False)
+    first_name = Column(String(100))
+    phone = Column(String(20), nullable=False)
+    created_at = Column(DateTime, default=datetime.now)
+
+class Order(Base):
+    __tablename__ = 'orders'
+    
+    id = Column(Integer, primary_key=True)
+    client_id = Column(Integer, nullable=False)
+    service_id = Column(Integer, nullable=False)
+    master_name = Column(String(100), nullable=False)
+    status = Column(String(20), default='pending')  # pending, confirmed, completed, cancelled
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+class BotSettings(Base):
+    __tablename__ = 'bot_settings'
+    
+    id = Column(Integer, primary_key=True)
+    welcome_message = Column(Text, default='Добро пожаловать в нашу студию маникюра!')
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
 class Database:
-    def __init__(self, db_name='beauty_bot.db'):
-        self.db_name = db_name
-        self.init_db()
-    
-    def get_connection(self):
-        return sqlite3.connect(self.db_name)
-    
-    def init_db(self):
-        try:
-            with self.get_connection() as conn:
-                cursor = conn.cursor()
-                
-                # Таблица услуг
-                cursor.execute('''
-                    CREATE TABLE IF NOT EXISTS services (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        category TEXT NOT NULL,
-                        name TEXT NOT NULL,
-                        price REAL NOT NULL,
-                        duration INTEGER NOT NULL,
-                        master_id INTEGER,
-                        is_active BOOLEAN DEFAULT TRUE
-                    )
-                ''')
-                
-                # Таблица мастеров
-                cursor.execute('''
-                    CREATE TABLE IF NOT EXISTS masters (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        name TEXT NOT NULL,
-                        specialties TEXT,
-                        is_active BOOLEAN DEFAULT TRUE
-                    )
-                ''')
-                
-                # Таблица клиентов
-                cursor.execute('''
-                    CREATE TABLE IF NOT EXISTS clients (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        telegram_id INTEGER UNIQUE,
-                        username TEXT,
-                        first_name TEXT,
-                        last_name TEXT,
-                        phone TEXT,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    )
-                ''')
-                
-                # Таблица заказов
-                cursor.execute('''
-                    CREATE TABLE IF NOT EXISTS orders (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        client_id INTEGER,
-                        service_id INTEGER,
-                        master_id INTEGER,
-                        status TEXT DEFAULT 'pending',
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        FOREIGN KEY (client_id) REFERENCES clients (id),
-                        FOREIGN KEY (service_id) REFERENCES services (id),
-                        FOREIGN KEY (master_id) REFERENCES masters (id)
-                    )
-                ''')
-                
-                # Вставляем начальные данные
-                self.insert_initial_data(cursor)
-                
-                conn.commit()
-                logging.info("База данных инициализирована успешно")
-                
-        except Exception as e:
-            logging.error(f"Ошибка инициализации БД: {e}")
-    
-    def insert_initial_data(self, cursor):
-        # Проверяем, есть ли уже мастера
-        cursor.execute("SELECT COUNT(*) FROM masters")
-        if cursor.fetchone()[0] == 0:
-            masters = [
-                ('Галина', 'Маникюр,Наращивание'),
-                ('Ольга', 'Маникюр,Гель Лак'),
-                ('Елена', 'Педикюр'),
-            ]
-            cursor.executemany(
-                "INSERT INTO masters (name, specialties) VALUES (?, ?)",
-                masters
-            )
+    def __init__(self):
+        self.engine = create_engine(config.DATABASE_URL)
+        self.Session = sessionmaker(bind=self.engine)
         
-        # Проверяем, есть ли уже услуги
-        cursor.execute("SELECT COUNT(*) FROM services")
-        if cursor.fetchone()[0] == 0:
-            services = [
-                ('Маникюр', 'Наращивание', 2500.0, 120, 1),
-                ('Маникюр', 'Классический маникюр', 1500.0, 60, 2),
-                ('Маникюр', 'Гель Лак', 1800.0, 90, 2),
-                ('Педикюр', 'Классический педикюр', 2000.0, 90, 3),
-                ('Педикюр', 'Аппаратный педикюр', 2500.0, 120, 3),
-            ]
-            cursor.executemany(
-                "INSERT INTO services (category, name, price, duration, master_id) VALUES (?, ?, ?, ?, ?)",
-                services
-            )
+    def init_db(self):
+        Base.metadata.create_all(self.engine)
+        self._create_default_data()
     
-    def add_client(self, telegram_id, username, first_name, last_name, phone):
+    def _create_default_data(self):
+        session = self.Session()
         try:
-            with self.get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute('''
-                    INSERT OR REPLACE INTO clients 
-                    (telegram_id, username, first_name, last_name, phone)
-                    VALUES (?, ?, ?, ?, ?)
-                ''', (telegram_id, username, first_name, last_name, phone))
-                conn.commit()
-                return cursor.lastrowid
+            # Проверяем, есть ли уже данные
+            if not session.query(Service).first():
+                # Добавляем стандартные услуги
+                default_services = [
+                    Service(category='Маникюр', name='Классический маникюр', price=1500, duration=60, master='Анна'),
+                    Service(category='Маникюр', name='Гель-лак', price=2000, duration=90, master='Мария'),
+                    Service(category='Маникюр', name='Наращивание', price=2500, duration=120, master='Елена'),
+                    Service(category='Педикюр', name='Классический педикюр', price=1800, duration=75, master='Ольга'),
+                    Service(category='Педикюр', name='Мужской педикюр', price=2000, duration=90, master='Иван')
+                ]
+                session.add_all(default_services)
+            
+            if not session.query(Master).first():
+                default_masters = [
+                    Master(name='Анна', specialization='Маникюр', phone='+79991234561'),
+                    Master(name='Мария', specialization='Гель-лак', phone='+79991234562'),
+                    Master(name='Елена', specialization='Наращивание', phone='+79991234563'),
+                    Master(name='Ольга', specialization='Педикюр', phone='+79991234564'),
+                    Master(name='Иван', specialization='Мужской педикюр', phone='+79991234565')
+                ]
+                session.add_all(default_masters)
+            
+            if not session.query(BotSettings).first():
+                session.add(BotSettings())
+            
+            session.commit()
         except Exception as e:
-            logging.error(f"Ошибка добавления клиента: {e}")
-            return None
+            session.rollback()
+            raise e
+        finally:
+            session.close()
     
-    def add_order(self, client_id, service_id, master_id):
-        try:
-            with self.get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute('''
-                    INSERT INTO orders (client_id, service_id, master_id)
-                    VALUES (?, ?, ?)
-                ''', (client_id, service_id, master_id))
-                conn.commit()
-                return cursor.lastrowid
-        except Exception as e:
-            logging.error(f"Ошибка добавления заказа: {e}")
-            return None
-    
-    def get_services_by_category(self, category):
-        try:
-            with self.get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute('''
-                    SELECT s.*, m.name as master_name 
-                    FROM services s 
-                    LEFT JOIN masters m ON s.master_id = m.id 
-                    WHERE s.category = ? AND s.is_active = TRUE
-                ''', (category,))
-                return cursor.fetchall()
-        except Exception as e:
-            logging.error(f"Ошибка получения услуг: {e}")
-            return []
-    
-    def get_service_by_id(self, service_id):
-        try:
-            with self.get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute('''
-                    SELECT s.*, m.name as master_name 
-                    FROM services s 
-                    LEFT JOIN masters m ON s.master_id = m.id 
-                    WHERE s.id = ?
-                ''', (service_id,))
-                return cursor.fetchone()
-        except Exception as e:
-            logging.error(f"Ошибка получения услуги: {e}")
-            return None
-    
-    def get_masters(self):
-        try:
-            with self.get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT * FROM masters WHERE is_active = TRUE")
-                return cursor.fetchall()
-        except Exception as e:
-            logging.error(f"Ошибка получения мастеров: {e}")
-            return []
-    
-    def get_clients(self):
-        try:
-            with self.get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT * FROM clients")
-                return cursor.fetchall()
-        except Exception as e:
-            logging.error(f"Ошибка получения клиентов: {e}")
-            return []
-    
-    def get_orders(self):
-        try:
-            with self.get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute('''
-                    SELECT o.*, c.first_name, c.phone, s.name as service_name, 
-                           s.price, s.duration, m.name as master_name
-                    FROM orders o
-                    JOIN clients c ON o.client_id = c.id
-                    JOIN services s ON o.service_id = s.id
-                    JOIN masters m ON o.master_id = m.id
-                ''')
-                return cursor.fetchall()
-        except Exception as e:
-            logging.error(f"Ошибка получения заказов: {e}")
-            return []
+    def get_session(self):
+        return self.Session()
 
-# Создаем глобальный экземпляр базы данных
+# Создаем экземпляр базы данных
 db = Database()

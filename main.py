@@ -1,82 +1,78 @@
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ConversationHandler
-from config import Config, check_config
-from client_handlers import *
-from admin_handlers import *
-import logging
-
-# Настройка логирования
-logging.basicConfig(
-    filename='bot.log',
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+from config import config, logger
+from database import db
+from client_handlers import (
+    start, handle_message, show_services, select_service, 
+    select_master, enter_phone, cancel,
+    SELECT_CATEGORY, SELECT_SERVICE, SELECT_MASTER, ENTER_PHONE
+)
+from admin_handlers import (
+    admin_panel, admin_main_handler, add_service, broadcast_message,
+    edit_welcome_message, show_clients_list, show_orders_list, admin_cancel,
+    ADMIN_MAIN, ADD_SERVICE, BROADCAST_MESSAGE, EDIT_WELCOME_MESSAGE
 )
 
-logger = logging.getLogger(__name__)
-
 def main():
-    # Проверка конфигурации
-    check_config()
-    
-    if not Config.TOKEN_LOADED:
-        logger.error("BOT_TOKEN не загружен! Проверьте .env файл.")
+    # Инициализация базы данных
+    try:
+        db.init_db()
+        logger.info("Database initialized successfully")
+    except Exception as e:
+        logger.error(f"Error initializing database: {e}")
         return
-    
-    # Создание приложения
-    application = Application.builder().token(Config.BOT_TOKEN).build()
-    
+
+    # Создаем приложение
+    application = Application.builder().token(config.BOT_TOKEN).build()
+
     # Обработчик для клиентов
-    client_conv_handler = ConversationHandler(
-        entry_points=[
-            MessageHandler(filters.Regex('^(💅 Маникюр|👣 Педикюр)$'), handle_category)
-        ],
+    client_conversation = ConversationHandler(
+        entry_points=[CommandHandler('start', start)],
         states={
-            CATEGORY: [
-                MessageHandler(filters.Regex('^(💅 Маникюр|👣 Педикюр)$'), handle_category)
+            SELECT_CATEGORY: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
             ],
-            SERVICE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_service)
+            SELECT_SERVICE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, select_service)
             ],
-            MASTER: [
-                MessageHandler(filters.Regex(r'^💰 \d+ руб\.$'), handle_master),
-                MessageHandler(filters.Regex('^Назад$'), handle_service)
+            SELECT_MASTER: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, select_master)
             ],
-            PHONE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_phone)
+            ENTER_PHONE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, enter_phone)
             ]
         },
         fallbacks=[CommandHandler('cancel', cancel)]
     )
-    
+
     # Обработчик для администраторов
-    admin_conv_handler = ConversationHandler(
-        entry_points=[CommandHandler('admin', admin_start)],
+    admin_conversation = ConversationHandler(
+        entry_points=[CommandHandler('admin', admin_panel)],
         states={
             ADMIN_MAIN: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_admin_actions)
+                MessageHandler(filters.TEXT & ~filters.COMMAND, admin_main_handler)
             ],
-            ADMIN_MASTERS: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_masters_management)
+            ADD_SERVICE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, add_service)
+            ],
+            BROADCAST_MESSAGE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, broadcast_message)
+            ],
+            EDIT_WELCOME_MESSAGE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, edit_welcome_message)
             ]
         },
         fallbacks=[CommandHandler('cancel', admin_cancel)]
     )
+
+    # Добавляем обработчики
+    application.add_handler(client_conversation)
+    application.add_handler(admin_conversation)
     
-    # Добавление обработчиков
-    application.add_handler(CommandHandler('start', start))
-    application.add_handler(client_conv_handler)
-    application.add_handler(admin_conv_handler)
-    
-    # Обработчики дополнительных кнопок
-    application.add_handler(MessageHandler(filters.Regex('^📞 Позвонить$'), handle_contact))
-    application.add_handler(MessageHandler(filters.Regex('^🌐 Посетить сайт$'), handle_website))
-    application.add_handler(MessageHandler(filters.Regex('^📢 Перейти в Telegram канал$'), handle_channel))
-    application.add_handler(MessageHandler(filters.Regex('^📍 Посмотреть адрес на карте$'), handle_location))
-    application.add_handler(MessageHandler(filters.Regex('^📄 Скачать прайс в PDF$'), handle_price))
-    
-    # Запуск бота
-    logger.info("Бот запущен")
-    print("Бот запущен. Нажмите Ctrl+C для остановки.")
-    
+    # Обработчик для обычных сообщений
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+    # Запускаем бота
+    logger.info("Bot started successfully")
     application.run_polling()
 
 if __name__ == '__main__':

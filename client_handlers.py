@@ -17,7 +17,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     session = db.get_session()
     try:
-        # Получаем приветственное сообщение из настроек
         settings = session.query(BotSettings).first()
         welcome_message = settings.welcome_message if settings else "Добро пожаловать в нашу студию маникюра!"
         
@@ -118,7 +117,6 @@ async def select_service(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         if service:
             context.user_data['service'] = service
-            context.user_data['service_name'] = service.name
             
             keyboard = [
                 [f"Выбрать мастера ({service.master})"],
@@ -137,9 +135,6 @@ async def select_service(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             
             return SELECT_MASTER
-        else:
-            await update.message.reply_text("Услуга не найдена. Пожалуйста, выберите из списка.")
-            return SELECT_SERVICE
         
     except Exception as e:
         logger.error(f"Error selecting service: {e}")
@@ -153,35 +148,25 @@ async def select_master(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     
     if text == '⬅️ Назад':
-        # Возвращаем к выбору услуг в той же категории
         category = context.user_data.get('category')
-        if category:
-            await show_services(update, context, category)
-            return SELECT_SERVICE
-        else:
-            await start(update, context)
-            return ConversationHandler.END
+        await show_services(update, context, category)
+        return SELECT_SERVICE
     
     if text.startswith('Выбрать мастера'):
         service = context.user_data.get('service')
-        
         if service:
             context.user_data['master'] = service.master
-            
             await update.message.reply_text(
                 "Пожалуйста, введите ваш номер телефона для связи:",
                 reply_markup=ReplyKeyboardRemove()
             )
-            
             return ENTER_PHONE
     
-    await update.message.reply_text("Пожалуйста, выберите действие из меню.")
     return SELECT_MASTER
 
 async def enter_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     
-    # Если пользователь нажал "Назад" через другой способ
     if text == '⬅️ Назад':
         service = context.user_data.get('service')
         if service:
@@ -192,41 +177,33 @@ async def enter_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
             await update.message.reply_text("Выберите действие:", reply_markup=reply_markup)
             return SELECT_MASTER
-        else:
-            await start(update, context)
-            return ConversationHandler.END
     
     # Валидация номера телефона
     if not any(char.isdigit() for char in text) or len(text) < 5:
         await update.message.reply_text("Пожалуйста, введите корректный номер телефона:")
         return ENTER_PHONE
     
-    phone = text
-    
     session = db.get_session()
     try:
-        # Сохраняем клиента
         client = Client(
             telegram_id=update.message.from_user.id,
             first_name=update.message.from_user.first_name,
-            phone=phone
+            phone=text
         )
         session.add(client)
         session.flush()
         
-        # Сохраняем заказ
         service = context.user_data.get('service')
         order = Order(
             client_id=client.id,
             service_id=service.id,
-            master_name=context.user_data.get('master', 'Не указан'),
+            master_name=context.user_data.get('master', service.master),
             status='pending'
         )
         session.add(order)
-        
         session.commit()
         
-        # Отправляем уведомление администраторам
+        # Уведомление администраторам
         for admin_id in config.ADMIN_IDS:
             try:
                 await context.bot.send_message(
@@ -238,8 +215,8 @@ async def enter_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
                          f"Категория услуг - {context.user_data['category']}\n"
                          f"Услуга - {service.name}\n"
                          f"Стоимость - {service.price} руб.\n"
-                         f"Время оказания услуги - {service.duration} мин.\n"
-                         f"Мастер - {context.user_data.get('master', 'Не указан')}\n\n"
+                         f"Время - {service.duration} мин.\n"
+                         f"Мастер - {service.master}\n\n"
                          f"Свяжитесь с клиентом для согласования дня и времени!"
                 )
             except Exception as e:
@@ -250,10 +227,7 @@ async def enter_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=ReplyKeyboardRemove()
         )
         
-        # Очищаем данные пользователя
         context.user_data.clear()
-        
-        # Возвращаем к началу
         await start(update, context)
         
     except Exception as e:
@@ -266,12 +240,7 @@ async def enter_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Очищаем данные пользователя
     context.user_data.clear()
-    
-    await update.message.reply_text(
-        "Действие отменено.",
-        reply_markup=ReplyKeyboardRemove()
-    )
+    await update.message.reply_text("Действие отменено.", reply_markup=ReplyKeyboardRemove())
     await start(update, context)
     return ConversationHandler.END

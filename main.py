@@ -27,45 +27,29 @@ def main():
     # Обработчик для обычных сообщений (главное меню)
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    # Обработчик для клиентов
+    # Обработчик для клиентов - УПРОЩЕННАЯ ВЕРСИЯ
     client_conversation = ConversationHandler(
-        entry_points=[],
+        entry_points=[MessageHandler(filters.Regex('^(💅 Маникюр|🦶 Педикюр)$'), handle_message)],
         states={
-            SELECT_SERVICE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, select_service)
-            ],
-            SELECT_MASTER: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, select_master)
-            ],
-            ENTER_PHONE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, enter_phone)
-            ]
+            SELECT_SERVICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, select_service)],
+            SELECT_MASTER: [MessageHandler(filters.TEXT & ~filters.COMMAND, select_master)],
+            ENTER_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_phone)]
         },
         fallbacks=[CommandHandler('cancel', cancel)],
-        allow_reentry=True,
-        per_message=False
+        allow_reentry=True
     )
 
     # Обработчик для администраторов
     admin_conversation = ConversationHandler(
         entry_points=[CommandHandler('admin', admin_panel)],
         states={
-            ADMIN_MAIN: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, admin_main_handler)
-            ],
-            ADD_SERVICE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, add_service)
-            ],
-            BROADCAST_MESSAGE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, broadcast_message)
-            ],
-            EDIT_WELCOME_MESSAGE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, edit_welcome_message)
-            ]
+            ADMIN_MAIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_main_handler)],
+            ADD_SERVICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_service)],
+            BROADCAST_MESSAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, broadcast_message)],
+            EDIT_WELCOME_MESSAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_welcome_message)]
         },
         fallbacks=[CommandHandler('cancel', admin_cancel)],
-        allow_reentry=True,
-        per_message=False
+        allow_reentry=True
     )
 
     # Добавляем обработчики

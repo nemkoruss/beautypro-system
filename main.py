@@ -1,8 +1,8 @@
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from config import config, logger
 from database import db
-from client_handlers import start, handle_message
-from admin_handlers import admin_panel
+from client_menu import show_main_menu, handle_client_message
+from admin_menu import show_admin_menu, handle_admin_message  # Импортируем из admin_menu.py
 
 def main():
     # Инициализация базы данных
@@ -17,13 +17,23 @@ def main():
     application = Application.builder().token(config.BOT_TOKEN).build()
 
     # Добавляем обработчики
-    application.add_handler(CommandHandler('start', start))
-    application.add_handler(CommandHandler('admin', admin_panel))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    application.add_handler(CommandHandler('start', show_main_menu))
+    application.add_handler(CommandHandler('admin', show_admin_menu))
+    
+    # Обработчик для всех сообщений
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_all_messages))
 
     # Запускаем бота
     logger.info("Bot started successfully")
     application.run_polling()
+
+async def handle_all_messages(update, context):
+    user_id = update.message.from_user.id
+    
+    if user_id in config.ADMIN_IDS:
+        await handle_admin_message(update, context)
+    else:
+        await handle_client_message(update, context)
 
 if __name__ == '__main__':
     main()

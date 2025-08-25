@@ -1,7 +1,7 @@
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from config import config, logger
 from database import db
-from client_menu import show_main_menu, handle_client_message
+from client_handlers import start, handle_message  # Импортируем из client_handlers.py
 from admin_menu import show_admin_menu, handle_admin_message  # Импортируем из admin_menu.py
 
 def main():
@@ -17,7 +17,7 @@ def main():
     application = Application.builder().token(config.BOT_TOKEN).build()
 
     # Добавляем обработчики
-    application.add_handler(CommandHandler('start', show_main_menu))
+    application.add_handler(CommandHandler('start', start))
     application.add_handler(CommandHandler('admin', show_admin_menu))
     
     # Обработчик для всех сообщений
@@ -33,7 +33,7 @@ async def handle_all_messages(update, context):
     if user_id in config.ADMIN_IDS:
         await handle_admin_message(update, context)
     else:
-        await handle_client_message(update, context)
+        await handle_message(update, context)  # Используем handle_message из client_handlers
 
 if __name__ == '__main__':
     main()

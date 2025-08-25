@@ -1,8 +1,9 @@
-from telegram.ext import Application, CommandHandler, MessageHandler, filters
+from telegram import Update, ReplyKeyboardRemove
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from config import config, logger
 from database import db
 from client_handlers import start, handle_message
-from admin_handlers import admin_panel  # Импортируем из admin_handlers.py
+from admin_handlers import admin_panel
 
 def main():
     # Инициализация базы данных

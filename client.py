@@ -8,6 +8,9 @@ from database import db
 PHONE, SERVICE_SELECTION = range(2)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Очищаем user_data при каждом старте
+    context.user_data.clear()
+    
     if update.message.from_user.id in config.ADMIN_IDS:
         # Администраторы видят админ-меню
         keyboard = [['/admin']]
@@ -16,7 +19,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Добро пожаловать в панель администратора!",
             reply_markup=reply_markup
         )
-        return
+        return ConversationHandler.END
     
     # Клиентское меню
     welcome_message = db.get_setting('welcome_message') or 'Рады Вас видеть в нашей студии маникюра "Ноготочки-Точка"!'
@@ -28,10 +31,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     
     await update.message.reply_text(welcome_message, reply_markup=reply_markup)
+    return ConversationHandler.END
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.from_user.id in config.ADMIN_IDS:
-        return
+    # Если пользователь администратор и не в админ-панели, предлагаем перейти в админку
+    if update.message.from_user.id in config.ADMIN_IDS and not context.user_data.get('in_admin'):
+        keyboard = [['/admin']]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        await update.message.reply_text(
+            "Вы администратор. Используйте /admin для доступа к панели управления.",
+            reply_markup=reply_markup
+        )
+        return ConversationHandler.END
     
     text = update.message.text
     
@@ -151,11 +162,16 @@ async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=reply_markup
         )
     
+    # Очищаем временные данные
+    context.user_data.pop('selected_service', None)
     return ConversationHandler.END
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Очищаем временные данные
+    context.user_data.clear()
+    
     await update.message.reply_text(
-        "Действие отменено.",
+        "❌ Действие отменено.",
         reply_markup=ReplyKeyboardMarkup([['/start']], resize_keyboard=True)
     )
     return ConversationHandler.END

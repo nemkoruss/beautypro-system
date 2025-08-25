@@ -35,13 +35,20 @@ def main():
     
     application = Application.builder().token(config.BOT_TOKEN).build()
     
+    # Обработчик команды /start
+    application.add_handler(CommandHandler('start', start))
+    
+    # Обработчик команды /admin
+    application.add_handler(CommandHandler('admin', admin_panel))
+    
     # ConversationHandler для клиентов
     client_conv_handler = ConversationHandler(
         entry_points=[MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)],
         states={
             PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_phone)],
         },
-        fallbacks=[CommandHandler('cancel', cancel)]
+        fallbacks=[CommandHandler('cancel', cancel)],
+        allow_reentry=True
     )
     
     # ConversationHandler для администраторов
@@ -74,15 +81,19 @@ def main():
             EDIT_WELCOME: [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_welcome_handler)],
             SEND_MESSAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, send_message_handler)],
         },
-        fallbacks=[CommandHandler('cancel', admin_cancel)]
+        fallbacks=[CommandHandler('cancel', admin_cancel)],
+        allow_reentry=True
     )
     
     # Добавляем обработчики
-    application.add_handler(CommandHandler('start', start))
     application.add_handler(client_conv_handler)
     application.add_handler(admin_conv_handler)
     
+    # Обработчик для текстовых сообщений (fallback)
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    
     # Запускаем бота
+    logging.info("Бот запущен...")
     application.run_polling()
 
 if __name__ == '__main__':
